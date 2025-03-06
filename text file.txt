@@ -1,0 +1,182 @@
+%% File names for all seven bands
+file_band1 = 'muneebB1.TIF';
+file_band2 = 'muneebB2.TIF';
+file_band3 = 'muneebB3.TIF';
+file_band4 = 'muneebB4.TIF';
+file_band5 = 'muneebB5.TIF';
+file_band6 = 'muneebB6.TIF';
+file_band7 = 'muneebB7.TIF';
+
+% Read all bands
+band1 = imread(file_band1);
+band2 = imread(file_band2);
+band3 = imread(file_band3);
+band4 = imread(file_band4);
+band5 = imread(file_band5);
+band6 = imread(file_band6);
+band7 = imread(file_band7);
+
+% Define crop size (height and width of the crop area)
+crop_height = 250; % Desired height of the cropped area
+crop_width = 250;  % Desired width of the cropped area
+
+% Function to crop the center of a band
+crop_center = @(band) band( ...
+    round(size(band, 1) / 2 - crop_height / 2):round(size(band, 1) / 2 + crop_height / 2 - 1), ...
+    round(size(band, 2) / 2 - crop_width / 2):round(size(band, 2) / 2 + crop_width / 2 - 1));
+
+% Crop the center part of each band
+cropped_band1 = crop_center(band1);
+cropped_band2 = crop_center(band2);
+cropped_band3 = crop_center(band3);
+cropped_band4 = crop_center(band4);
+cropped_band5 = crop_center(band5);
+cropped_band6 = crop_center(band6);
+cropped_band7 = crop_center(band7);
+
+% Display cropped bands
+figure;
+
+subplot(3, 3, 1);
+imshow(cropped_band1, []);
+title('Cropped Band 1');
+
+subplot(3, 3, 2);
+imshow(cropped_band2, []);
+title('Cropped Band 2');
+
+subplot(3, 3, 3);
+imshow(cropped_band3, []);
+title('Cropped Band 3');
+
+subplot(3, 3, 4);
+imshow(cropped_band4, []);
+title('Cropped Band 4');
+
+subplot(3, 3, 5);
+imshow(cropped_band5, []);
+title('Cropped Band 5');
+
+subplot(3, 3, 6);
+imshow(cropped_band6, []);
+title('Cropped Band 6');
+
+subplot(3, 3, 7);
+imshow(cropped_band7, []);
+title('Cropped Band 7');
+
+% Step 1: Concatenate the first two cropped bands
+group1 = cat(3, cropped_band1, cropped_band2);
+
+% Step 2: Concatenate the next two cropped bands
+group2 = cat(3, cropped_band3, cropped_band4);
+
+% Step 3: Concatenate the last three cropped bands
+group3 = cat(3, cropped_band5, cropped_band6, cropped_band7);
+
+% Step 4: Combine the three grouped results into a final image
+final_image = cat(3, group1, group2, group3);
+
+% Normalize the final concatenated image for visualization
+normalized_final_image = double(final_image) / double(max(final_image(:)));
+
+% Create a False-Color RGB composite (use Bands 1, 4, and 7 as an example)
+rgb_composite = cat(3, normalized_final_image(:, :, 1), ... % Red (Band 1)
+                       normalized_final_image(:, :, 4), ... % Green (Band 4)
+                       normalized_final_image(:, :, 7));   % Blue (Band 7)
+
+% Display the RGB composite
+figure;
+imshow(rgb_composite);
+title('RGB Composite of Final Concatenated Image (Bands 1, 4, 7)');
+
+% Step 1: Load and reshape the RGB composite image into a 2D matrix
+[m, n, c] = size(rgb_composite); % Get dimensions of the image (m: height, n: width, c: color channels)
+data_matrix = double(reshape(rgb_composite, [], c)); % Convert to (pixels x channels)
+
+% Step 2: Calculate the mean for each color channel (R, G, B)
+mean_vector = mean(data_matrix, 1); % Compute mean of each channel
+
+% Step 3: Center the data by subtracting the mean
+data_centered = data_matrix - mean_vector;
+
+% Step 4: Calculate the covariance matrix
+cov_matrix = (data_centered' * data_centered) / size(data_centered, 1); % Covariance matrix
+
+% Step 5: Compute eigenvalues and eigenvectors of the covariance matrix
+[eigenvectors, eigenvalues_matrix] = eig(cov_matrix);
+
+% Step 6: Sort eigenvalues and eigenvectors in descending order
+eigenvalues = diag(eigenvalues_matrix); % Extract eigenvalues
+[~, indices] = sort(eigenvalues, 'descend'); % Sort eigenvalues in descending order
+eigenvectors = eigenvectors(:, indices); % Reorder eigenvectors accordingly
+
+% Step 7: Calculate cumulative variance explained by each PC
+total_variance = sum(eigenvalues);
+explained_variance = eigenvalues / total_variance; % Variance explained by each PC
+cumulative_variance = cumsum(explained_variance); % Cumulative variance
+
+% Step 8: Initialize arrays for errors and cumulative variance
+max_k = 2; % We are using only 2 PCs for this example
+errors = zeros(max_k, 1); % Store reconstruction error for each k
+cumulative_variance_error = zeros(max_k, 1); % Store cumulative variance for each k
+
+% Step 9: Loop through different values of k (number of PCs to retain)
+for k = 1:max_k
+    % Select the first k eigenvectors (top k principal components)
+    eigenvectors_k = eigenvectors(:, 1:k);
+    
+    % Project the data onto the top k PCs
+    projected_data = data_centered * eigenvectors_k;
+    
+    % Reconstruct the data from the top k PCs
+    reconstructed_data = projected_data * eigenvectors_k' + mean_vector;
+    
+    % Compute the reconstruction error (normalized Frobenius norm)
+    reconstruction_error = norm(data_matrix - reconstructed_data, 'fro') / norm(data_matrix, 'fro');
+    errors(k) = reconstruction_error;
+    
+    % Cumulative variance for the selected top k PCs
+    cumulative_variance_error(k) = cumulative_variance(k);
+end
+
+% Step 10: Plot the results
+figure;
+
+% Plot 1: Reconstruction error vs number of PCs
+subplot(1, 2, 1);
+plot(1:max_k, errors, '-o', 'LineWidth', 1.5);
+xlabel('Number of Principal Components (k)');
+ylabel('Reconstruction Error');
+title('Reconstruction Error vs Number of PCs');
+grid on;
+
+% Plot 2: Cumulative variance explained vs number of PCs
+subplot(1, 2, 2);
+plot(1:max_k, cumulative_variance_error, '-o', 'LineWidth', 1.5);
+xlabel('Number of Principal Components (k)');
+ylabel('Cumulative Variance Explained');
+title('Cumulative Variance Explained vs Number of PCs');
+grid on;
+
+% Step 11: Select the optimal number of PCs based on reconstruction error
+% For this case, we are using 2 PCs, but the error is still computed
+disp(['Optimal number of Principal Components based on error: ', num2str(max_k)]);
+
+% Step 12: Display the first principal component image using 2 PCs for dimensionality reduction
+top_k = 2; % We are selecting the top 2 PCs
+eigenvectors_2 = eigenvectors(:, 1:top_k); % Get the first 2 principal components
+projected_data_2 = data_centered * eigenvectors_2; % Project data onto 2 PCs
+reconstructed_data_2 = projected_data_2 * eigenvectors_2' + mean_vector; % Reconstruct the data
+
+% Step 13: Reshape the reconstructed data back into the original image dimensions
+reconstructed_image_2 = reshape(reconstructed_data_2, m, n, c);
+
+% Step 14: Display the results (original image and the reconstructed image using 2 PCs)
+figure;
+subplot(1, 2, 1);
+imshow(rgb_composite);
+title('Original RGB Image');
+subplot(1, 2, 2);
+imshow(uint8(reconstructed_image_2));
+title('Reconstructed Image using 2 Principal Components');
